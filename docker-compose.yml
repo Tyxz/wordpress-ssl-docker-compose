@@ -1,41 +1,29 @@
-version: '3'
+version: '3.1'
 
 services:
-  wp:
-    image: wordpress:latest # https://hub.docker.com/_/wordpress/
-    ports:
-      - ${IP}:80:80 # change ip if required
+  db:
+    image: mysql:latest # https://hub.docker.com/_/mysql/ - or mariadb https://hub.docker.com/_/mariadb
+    container_name: mysql
+    restart: unless-stopped
+    command: [
+        '--default_authentication_plugin=mysql_native_password',
+        '--character-set-server=utf8mb4',
+        '--collation-server=utf8mb4_unicode_ci'
+    ]
     volumes:
-      - ./config/php.conf.ini:/usr/local/etc/php/conf.d/conf.ini
-      - ./wp-app:/var/www/html # Full wordpress project
-      #- ./plugin-name/trunk/:/var/www/html/wp-content/plugins/plugin-name # Plugin development
-      #- ./theme-name/trunk/:/var/www/html/wp-content/themes/theme-name # Theme development
+      #- ./wordpress:/docker-entrypoint-initdb.d
+      - db_data:/var/lib/mysql
+    env_file: .env
     environment:
-      WORDPRESS_DB_HOST: db
-      WORDPRESS_DB_NAME: "${DB_NAME}"
-      WORDPRESS_DB_USER: root
-      WORDPRESS_DB_PASSWORD: "${DB_ROOT_PASSWORD}"
-    depends_on:
-      - db
-    links:
-      - db
+      MYSQL_DATABASE: "${DB_NAME}"
+      MYSQL_USER: "${DB_USER}"
+      MYSQL_PASSWORD: "${DB_PASSWORD}"
+      MYSQL_ROOT_PASSWORD: "${DB_ROOT_PASSWORD}"
 
-  wpcli:
-    image: wordpress:cli
-    volumes:
-      - ./config/php.conf.ini:/usr/local/etc/php/conf.d/conf.ini
-      - ./wp-app:/var/www/html
-    environment:
-      WORDPRESS_DB_HOST: db
-      WORDPRESS_DB_NAME: "${DB_NAME}"
-      WORDPRESS_DB_USER: root
-      WORDPRESS_DB_PASSWORD: "${DB_ROOT_PASSWORD}"
-    depends_on:
-      - db
-      - wp
-
-  pma:
+  phpmyadmin:
     image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin
+    restart: unless-stopped
     environment:
       # https://docs.phpmyadmin.net/en/latest/setup.html#docker-environment-variables
       PMA_HOST: db
@@ -44,24 +32,49 @@ services:
       UPLOAD_LIMIT: 50M
     ports:
       - ${IP}:8080:80
-    links:
-      - db:db
 
-  db:
-    image: mysql:latest # https://hub.docker.com/_/mysql/ - or mariadb https://hub.docker.com/_/mariadb
+  wordpress:
+    image: wordpress:latest # https://hub.docker.com/_/wordpress/
+    container_name: wordpress
+    restart: unless-stopped
     ports:
-      - ${IP}:3306:3306 # change ip if required
-    command: [
-        '--default_authentication_plugin=mysql_native_password',
-        '--character-set-server=utf8mb4',
-        '--collation-server=utf8mb4_unicode_ci'
-    ]
+      - ${IP}:80:80 # http
+      - ${IP}:443:443 # https
     volumes:
-      - ./wp-data:/docker-entrypoint-initdb.d
-      - db_data:/var/lib/mysql
+      - ./config/php.conf.ini:/usr/local/etc/php/conf.d/conf.ini # PHP settings
+      - ./config/ssl/certs:/etc/ssl/certs:ro  # SSL certificate
+      - ./config/ssl/private:/etc/ssl/private:ro # SSL private key
+      - ./config/default-ssl.conf:/etc/apache2/sites-available/default-ssl.conf:ro # Apache SSL config
+      - ./config/docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro # Docker entry point
+      - ./wordpress:/var/www/html # Full wordpress project
+      #- ./plugin-name/trunk/:/var/www/html/wp-content/plugins/plugin-name # Plugin development
+      #- ./theme-name/trunk/:/var/www/html/wp-content/themes/theme-name # Theme development
+    env_file: .env
     environment:
-      MYSQL_DATABASE: "${DB_NAME}"
-      MYSQL_ROOT_PASSWORD: "${DB_ROOT_PASSWORD}"
+      WORDPRESS_TABLE_PREFIX: wp_ # change if needed
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: "${DB_NAME}"
+      WORDPRESS_DB_USER: "${DB_USER}"
+      WORDPRESS_DB_PASSWORD: "${DB_PASSWORD}"
+    depends_on:
+      - db
+
+  wordpress_cli:
+    image: wordpress:cli
+    container_name: wordpress_cli
+    restart: unless-stopped
+    volumes:
+      - ./config/php.conf.ini:/usr/local/etc/php/conf.d/conf.ini
+      - ./wordpress:/var/www/html
+    env_file: .env
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: "${DB_NAME}"
+      WORDPRESS_DB_USER: "${DB_USER}"
+      WORDPRESS_DB_PASSWORD: "${DB_PASSWORD}"
+    depends_on:
+      - db
+      - wordpress
 
 volumes:
   db_data:

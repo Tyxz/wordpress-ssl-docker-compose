@@ -33,6 +33,39 @@ cp env.example .env
 
 Edit the `.env` file to change the default IP address, MySQL root password and WordPress database name.
 
+### SSL
+
+You can either run the [create_ssl_certificate.sh](./create_ssl_certificate.sh) or manually execute the following steps.
+
+#### Certificate Authority
+
+First, create a private key for your SSL Certification Authority with `openssl`.
+```
+openssl genrsa -des3 -out ./config/root/private/CAPrivate.key 2048
+```
+Then, create a [X509 root certificate](https://en.wikipedia.org/wiki/X.509), which you can use to sign your future certificates with
+```
+openssl req -x509 -new -nodes -key ./config/root/private/CAPrivate.key \\ 
+            -sha256 -days 365 -out ./config/root/certs/CARoot.crt
+```
+Finally, add the certificate as a trusted root certificate in your browser.
+In Firefox, it is under `Settings->Certificate->Show certificate...->Certificate Authority->Import`.
+
+> Note: With doing this, you accept all signed certificates from this authority to be trustworthy. Be very careful and keep your private key secure, to not become a victim of an attacker using this security weekness.
+
+#### Website
+
+Generate a private key for your website.
+```
+openssl genrsa -out ./config/ssl/private/MyPrivate.key 2048
+```
+Next, use this private key and your previously generated root certificate together with the private key of the certificate authority to generate your SSL certificate.
+```
+openssl req -nodes -config ./config/request.config \\
+            -key ./config/ssl/private/MyPrivate.key -out ./config/ssl/certs/MyPrivate.crt \\
+            -CA ./config/root/certs/CARoot.crt -CAkey ./config/root/private/CAPrivate.key
+```
+
 ## Installation
 
 Open a terminal and `cd` to the folder in which `docker-compose.yml` is saved and run:
@@ -44,7 +77,7 @@ docker-compose up
 This creates two new folders next to your `docker-compose.yml` file.
 
 * `wp-data` – used to store and restore database dumps
-* `wp-app` – the location of your WordPress application
+* `wordpress` – the location of your WordPress application
 
 The containers are now built and running. You should be able to access the WordPress installation with the configured IP in the browser address. By default it is `http://127.0.0.1`.
 
@@ -85,7 +118,7 @@ docker-compose down -v
 Copy the `docker-compose.yml` file into a new directory. In the directory you create two folders:
 
 * `wp-data` – here you add the database dump
-* `wp-app` – here you copy your existing WordPress code
+* `wordpress` – here you copy your existing WordPress code
 
 You can now use the `up` command:
 
